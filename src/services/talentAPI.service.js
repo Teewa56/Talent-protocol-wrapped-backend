@@ -1,5 +1,6 @@
 const axios = require('axios');
 const config = require('../config/index');
+const scraperService = require('./scraper.service');
 
 class TalentApiService {
     constructor() {
@@ -7,31 +8,36 @@ class TalentApiService {
         this.apiKey = config.talentProtocol.apiKey;
         this.headers = {
             'X-API-KEY': this.apiKey,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
         };
     }
 
-    // Fetch user profile by basename - THIS IS A POST REQUEST
     async getUserProfile(baseName) {
         try {
             const data = {
                 "query": {
-                    "identity": `${baseName}`,
-                   "exactMatch": true
+                    "identity": baseName,
+                    "exactMatch": true
                 },
                 "sort": {
                     "id": { "order": "asc" }
                 },
                 page: 1,
                 per_page: 25
-            }
+            };
 
             const queryString = Object.keys(data)
                 .map(key => `${key}=${encodeURIComponent(JSON.stringify(data[key]))}`)
                 .join("&");
                 
-            const response = await axios.get(`${this.baseURL}/search/advanced/profiles?${queryString}`, {headers: this.headers});
-            console.log('profile', response.data)
+            const response = await axios.get(
+                `${this.baseURL}/search/advanced/profiles?${queryString}`, 
+                { headers: this.headers }
+            );
+            
+            console.log('Profile fetched');
+            
             if (!response.data.profiles || response.data.profiles.length === 0) {
                 return { success: false, error: 'User not found' };
             }
@@ -48,222 +54,33 @@ class TalentApiService {
         }
     }
     
-    // Get all data points for a user
-    async getDataPoints(identifier, credentialSlug = null) {
-        try {
-            const url = credentialSlug 
-                ? `${this.baseURL}/data_points/${credentialSlug}/${identifier}`
-                : `${this.baseURL}/data_points/${identifier}`;
-                
-            const response = await axios.get(url, { headers: this.headers });
-            console.log('datapoints', response.data)
-            // Check if response is HTML (authentication error)
-            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-                return {
-                    success: false,
-                    error: 'Authentication required - endpoint needs valid API key'
-                };
-            }
-
-            return {
-                success: true,
-                data: response.data.data_points || response.data,
-                metadata: response.data.metadata || null
-            };
-        } catch (error) {
-            return this.handleError('getDataPoints', error);
-        }
-    }
-
-    // Get specific activity data points
-    async getActivityDataPoints(identifier) {
-        try {
-            // Fetch onchain activity data points
-            const onchainActivity = await this.getDataPoints(identifier, 'onchain_activity');
-            const githubData = await this.getDataPoints(identifier, 'github');
-            const baseData = await this.getDataPoints(identifier, 'base');
-            
-            return {
-                success: true,
-                data: {
-                    onchain: onchainActivity.success ? onchainActivity.data : null,
-                    github: githubData.success ? githubData.data : null,
-                    base: baseData.success ? baseData.data : null
-                }
-            };
-        } catch (error) {
-            return this.handleError('getActivityDataPoints', error);
-        }
-    }
-
-    // Get credentials for a user
-    async getCredentials(identifier) {
-        try {
-            const data = {
-                "query": {
-                    "id": `${identifier}`,
-                    "exactMatch": true
-                },
-                "sort": {
-                    "id": { "order": "asc" }
-                },
-                page: 1,
-                per_page: 25
-            }
-
-            const queryString = Object.keys(data)
-                .map(key => `${key}=${encodeURIComponent(JSON.stringify(data[key]))}`)
-                .join("&");
-
-            const response = await axios.get(
-                `${this.baseURL}/credentials/?identifier=${queryString}`,
-                { headers: this.headers }
-            );
-
-            console.log('getcredentials', response.data)
-
-            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-                return { success: false, error: 'Authentication required' };
-            }
-
-            return {
-                success: true,
-                data: response.data.credentials || response.data
-            };
-        } catch (error) {
-            return this.handleError('getCredentials', error);
-        }
-    }
-
-    // Get historical events/activity for a user - POST REQUEST
-    async getEvents(identifier, options = {}) {
+    async getScore(identifier, scorerSlug = 'builder_score') {
         try {
             const params = {
-                account_identifier: identifier,
-                page: options.page || 1,
-                per_page: options.perPage || 50,
-                ...options
+                id: identifier,
+                scorer_slug: scorerSlug
             };
-
-            const response = await axios.post(
-                `${this.baseURL}/search/advanced/events`,
-                params,
-                { headers: this.headers }
-            );
-
-            console.log('getevents', response.data)
-
-            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-                return { success: false, error: 'Authentication required' };
-            }
-
-            return {
-                success: true,
-                data: response.data.events || [],
-                pagination: response.data.pagination || null
-            };
-        } catch (error) {
-            return this.handleError('getEvents', error);
-        }
-    }
-    
-    // Get connected accounts for a user
-    async getAccounts(identifier) {
-        try {
-            const response = await axios.get(
-                `${this.baseURL}/accounts/${identifier}`,
-                { headers: this.headers }
-            );
-
-            console.log('accounts', response.data)
-
-            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-                return { success: false, error: 'Authentication required' };
-            }
-
-            return {
-                success: true,
-                data: response.data.accounts || []
-            };
-        } catch (error) {
-            return this.handleError('getAccounts', error);
-        }
-    }
-    
-    // Get social connections
-    async getSocials(identifier) {
-        try {
-            const response = await axios.get(
-                `${this.baseURL}/socials/${identifier}`,
-                { headers: this.headers }
-            );
-
-            console.log('socails', response.data)
-
-            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-                return { success: false, error: 'Authentication required' };
-            }
-
-            return {
-                success: true,
-                data: response.data.socials || []
-            };
-        } catch (error) {
-            return this.handleError('getSocials', error);
-        }
-    }
-    
-    // Get projects created by the user
-    async getProjects(identifier) {
-        try {
-            const response = await axios.get(
-                `${this.baseURL}/projects/${identifier}`,
-                { headers: this.headers }
-            );
             
-            console.log('projects', response.data)
-
-            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-                return { success: false, error: 'Authentication required' };
-            }
-
-            return {
-                success: true,
-                data: response.data.projects || []
-            };
-        } catch (error) {
-            return this.handleError('getProjects', error);
-        }
-    }
-    
-    // Get specific score by slug
-    async getScore(identifier, scoreSlug) {
-        try {
-            const response = await axios.get(
-                `${this.baseURL}/scores/${scoreSlug}/${identifier}`,
-                { headers: this.headers }
-            );
+            const response = await axios.get(`${this.baseURL}/score`, {
+                headers: this.headers,
+                params: params
+            });
             
-            console.log('score', response.data)
-
-            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-                return { success: false, error: 'Authentication required' };
-            }
-
+            console.log(`Score (${scorerSlug}) fetched`);
+            
             return {
                 success: true,
-                data: response.data
+                data: response.data.score || response.data
             };
         } catch (error) {
-            return this.handleError('getScore', error);
+            return this.handleError(`getScore (${scorerSlug})`, error);
         }
     }
 
-    // Get all scores for a user
     async getAllScores(identifier) {
         try {
+            const scoreSlugs = ['builder_score', 'creator_score', 'base_builder_score', 'base200_score'];
             const scores = {};
-            const scoreSlugs = ['builder_score', 'creator_score', 'base_builder_score'];
             
             for (const slug of scoreSlugs) {
                 const result = await this.getScore(identifier, slug);
@@ -280,73 +97,191 @@ class TalentApiService {
             return this.handleError('getAllScores', error);
         }
     }
-    
-    async getHumanCheckmark(identifier) {
+
+    async getCredentials(identifier) {
         try {
+            const data = {
+                "query": {
+                    "profile_id": identifier
+                },
+                "sort": {
+                    "last_calculated_at": { "order": "desc" }
+                },
+                page: 1,
+                per_page: 100
+            };
+
+            const queryString = Object.keys(data)
+                .map(key => `${key}=${encodeURIComponent(JSON.stringify(data[key]))}`)
+                .join("&");
+
             const response = await axios.get(
-                `${this.baseURL}/human_checkmark/${identifier}`,
+                `${this.baseURL}/search/advanced/credentials?${queryString}`,
                 { headers: this.headers }
             );
-            
-            console.log('checkmark', response.data)
 
-            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-                return { success: false, error: 'Authentication required' };
-            }
+            console.log('Credentials fetched');
 
             return {
                 success: true,
-                data: response.data
+                data: response.data.credentials || []
             };
         } catch (error) {
-            return this.handleError('getHumanCheckmark', error);
+            console.log('Credentials unavailable');
+            return { success: false, error: error.message, data: [] };
         }
     }
+
+    async getEvents(identifier, options = {}) {
+        try {
+            const data = {
+                "query": {
+                    "profile_id": identifier
+                },
+                "sort": {
+                    "created_at": { "order": "desc" }
+                },
+                page: options.page || 1,
+                per_page: options.perPage || 100
+            };
+
+            const queryString = Object.keys(data)
+                .map(key => `${key}=${encodeURIComponent(JSON.stringify(data[key]))}`)
+                .join("&");
+
+            const response = await axios.get(
+                `${this.baseURL}/search/advanced/events?${queryString}`,
+                { headers: this.headers }
+            );
+
+            console.log('Events fetched');
+
+            return {
+                success: true,
+                data: response.data.events || [],
+                pagination: response.data.pagination || null
+            };
+        } catch (error) {
+            console.log('Events unavailable');
+            return { success: false, error: error.message, data: [] };
+        }
+    }
+
+    extractProfileData(profile) {
+        return {
+            socials: this.extractSocials(profile),
+            accounts: this.extractAccounts(profile),
+            tags: profile.tags || [],
+            scores: profile.scores || []
+        };
+    }
+
+    extractSocials(profile) {
+        const socials = [];
+        
+        if (profile.twitter_handle || profile.x_handle) {
+            socials.push({
+                platform: 'twitter',
+                handle: profile.twitter_handle || profile.x_handle
+            });
+        }
+        
+        if (profile.github_handle) {
+            socials.push({
+                platform: 'github',
+                handle: profile.github_handle
+            });
+        }
+        
+        if (profile.farcaster_handle) {
+            socials.push({
+                platform: 'farcaster',
+                handle: profile.farcaster_handle
+            });
+        }
+        
+        return socials;
+    }
+
+    extractAccounts(profile) {
+        const accounts = [];
+        
+        if (profile.main_wallet) {
+            accounts.push({
+                type: 'wallet',
+                address: profile.main_wallet,
+                isPrimary: true
+            });
+        }
+        
+        if (profile.verified_wallets && Array.isArray(profile.verified_wallets)) {
+            profile.verified_wallets.forEach(wallet => {
+                if (wallet !== profile.main_wallet) {
+                    accounts.push({
+                        type: 'wallet',
+                        address: wallet,
+                        isPrimary: false
+                    });
+                }
+            });
+        }
+        
+        return accounts;
+    }
     
-    // Get all wrapped-relevant data in one method
     async getComprehensiveWrappedData(baseName) {
         try {
-            // First, get the profile
-            const profile = await this.getUserProfile(baseName);
+            const profileResult = await this.getUserProfile(baseName);
             
-            if (!profile.success) {
-                return profile; // Return the error
+            if (!profileResult.success) {
+                return profileResult;
             }
 
-            const userId = profile.data.id || baseName;
+            const profile = profileResult.rawProfile;
+            const userId = profileResult.data.id;
+            const relativePath = profileResult.relativePath;
 
-            // Fetch all data in parallel using the user ID
+            const embeddedData = this.extractProfileData(profile);
+
             const [
-                dataPoints,
                 credentials,
                 events,
-                accounts,
-                socials,
-                projects,
-                humanCheckmark
+                allScores
             ] = await Promise.all([
-                this.getActivityDataPoints(userId),
                 this.getCredentials(userId),
-                this.getEvents(userId, { per_page: 100 }),
-                this.getAccounts(userId),
-                this.getSocials(userId),
-                this.getProjects(userId),
-                this.getHumanCheckmark(userId)
+                this.getEvents(userId, { perPage: 100 }),
+                this.getAllScores(userId)
             ]);
+
+            console.log('\n🕷️  Starting web scraping...');
+            const scrapedData = await scraperService.scrapeProfile(relativePath);
+
+            console.log('\n📊 Data Summary:');
+            console.log(`   Profile: ✅`);
+            console.log(`   Credentials: ${credentials.success ? '✅' : '⚠️'}`);
+            console.log(`   Events: ${events.success ? '✅' : '⚠️'}`);
+            console.log(`   Scores: ${allScores.success ? '✅' : '⚠️'}`);
+            console.log(`   Scraping: ${scrapedData.success ? '✅' : '⚠️'}\n`);
 
             return {
                 success: true,
                 data: {
-                    profile: profile.data,
-                    dataPoints: dataPoints.success ? dataPoints.data : null,
-                    credentials: credentials.success ? credentials.data : null,
-                    events: events.success ? events.data : null,
-                    accounts: accounts.success ? accounts.data : null,
-                    socials: socials.success ? socials.data : null,
-                    projects: projects.success ? projects.data : null,
-                    humanCheckmark: humanCheckmark.success ? humanCheckmark.data : null
+                    profile: profileResult.data,
+                    socials: embeddedData.socials,
+                    accounts: embeddedData.accounts,
+                    tags: embeddedData.tags,
+                    credentials: credentials.success ? credentials.data : [],
+                    events: events.success ? events.data : [],
+                    allScores: allScores.success ? allScores.data : {},
+                    humanCheckmark: profile.human_checkmark || false,
+                    projects: scrapedData.success ? scrapedData.data.projects : [],
+                    scrapedStats: scrapedData.success ? scrapedData.data.detailedStats : {},
+                    activityFeed: scrapedData.success ? scrapedData.data.activityFeed : [],
+                    skills: scrapedData.success ? scrapedData.data.skills : [],
+                    achievements: scrapedData.success ? scrapedData.data.achievements : [],
+                    scrapingSuccess: scrapedData.success
                 },
-                relativePath: profile.relativePath
+                relativePath: profileResult.relativePath
             };
         } catch (error) {
             return this.handleError('getComprehensiveWrappedData', error);
@@ -368,21 +303,32 @@ class TalentApiService {
             talentProtocolId: profile.talent_protocol_id,
             builderScore: profile.builder_score,
             scores: profile.scores,
-            profileRefreshedAt: profile.profile_refreshed_at
+            profileRefreshedAt: profile.profile_refreshed_at,
+            mainWallet: profile.main_wallet,
+            verifiedWallets: profile.verified_wallets,
+            twitterHandle: profile.twitter_handle || profile.x_handle,
+            githubHandle: profile.github_handle,
+            farcasterHandle: profile.farcaster_handle
         };
     }
 
     handleError(methodName, error) {
-        console.error(`Error in ${methodName}:`, error.message);
-        if (error.response?.data) {
-            const dataPreview = typeof error.response.data === 'string' 
-                ? error.response.data.substring(0, 200) 
-                : JSON.stringify(error.response.data).substring(0, 200);
-            console.error('Response data preview:', dataPreview);
+        console.error(`❌ Error in ${methodName}:`, error.message);
+        
+        if (error.response) {
+            console.error(`   Status: ${error.response.status}`);
+            
+            const isHtml = typeof error.response.data === 'string' && 
+                          error.response.data.includes('<!DOCTYPE html>');
+            
+            if (isHtml) {
+                console.error('   Response: HTML (endpoint unavailable)');
+            }
         }
+        
         return {
             success: false,
-            error: error.response?.data?.message || error.message,
+            error: error.response?.data?.error || error.response?.data?.message || error.message,
             statusCode: error.response?.status || 500
         };
     }

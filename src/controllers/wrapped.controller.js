@@ -2,7 +2,6 @@ const talentApiService = require('../services/talentAPI.service');
 const { formatSuccess, formatError } = require('../utils/response.formatter');
 
 class WrappedController {
-    // Get complete wrapped data for a user
     async getWrappedData(req, res) {
         try {
             const { baseName } = req.params;
@@ -11,17 +10,16 @@ class WrappedController {
                 return res.status(400).json(formatError('Base name is required'));
             }
 
-            // Fetch comprehensive data from API
+            console.log(`\n Fetching wrapped data for: ${baseName}`);
+
             const apiData = await talentApiService.getComprehensiveWrappedData(baseName);
 
             if (!apiData.success) {
                 return res.status(404).json(formatError('User not found', apiData.error));
             }
 
-            // Process and calculate wrapped statistics
             const wrappedStats = calculateWrappedStats(apiData.data);
 
-            // Combine all data into wrapped format
             const wrappedData = {
                 user: {
                     id: apiData.data.profile?.id,
@@ -30,55 +28,84 @@ class WrappedController {
                     bio: apiData.data.profile?.bio,
                     imageUrl: apiData.data.profile?.imageUrl,
                     location: apiData.data.profile?.location,
-                    tags: apiData.data.profile?.tags,
+                    tags: apiData.data.profile?.tags || [],
                     verified: {
-                        human: apiData.data.humanCheckmark,
-                        nationality: apiData.data.profile?.verifiedNationality
+                        human: apiData.data.humanCheckmark || false,
+                        nationality: apiData.data.profile?.verifiedNationality || false
                     },
                     createdAt: apiData.data.profile?.createdAt,
-                    profileUrl: `https://talent.app${apiData.relativePath}`
+                    profileUrl: `https://talent.app${apiData.relativePath}`,
+                    socials: {
+                        twitter: apiData.data.profile?.twitterHandle,
+                        github: apiData.data.profile?.githubHandle,
+                        farcaster: apiData.data.profile?.farcasterHandle
+                    },
+                    wallets: {
+                        main: apiData.data.profile?.mainWallet,
+                        verified: apiData.data.profile?.verifiedWallets || []
+                    }
                 },
                 
                 scores: {
                     builder: apiData.data.profile?.builderScore,
-                    allScores: apiData.data.profile?.scores,
-                    level: getBuilderScoreLevel(apiData.data.profile?.builderScore?.points)
+                    allScores: apiData.data.profile?.scores || [],
+                    level: getBuilderScoreLevel(apiData.data.profile?.builderScore?.points),
+                    detailed: apiData.data.allScores || {}
                 },
                 
                 activity: {
-                    dataPoints: apiData.data.dataPoints,
                     events: {
                         total: apiData.data.events?.length || 0,
                         recent: apiData.data.events?.slice(0, 10) || [],
                         timeline: processEventsTimeline(apiData.data.events)
-                    }
+                    },
+                    monthlyBreakdown: getMonthlyActivityBreakdown(apiData.data.events)
                 },
                 
                 credentials: {
-                    all: apiData.data.credentials,
+                    all: apiData.data.credentials || [],
                     count: apiData.data.credentials?.length || 0,
-                    byCategory: groupCredentialsByCategory(apiData.data.credentials)
+                    byCategory: groupCredentialsByCategory(apiData.data.credentials),
+                    recent: (apiData.data.credentials || []).slice(0, 5)
                 },
                 
                 connections: {
-                    accounts: apiData.data.accounts,
-                    socials: apiData.data.socials,
-                    totalConnections: (apiData.data.accounts?.length || 0) + (apiData.data.socials?.length || 0)
+                    socials: apiData.data.socials || [],
+                    accounts: apiData.data.accounts || [],
+                    totalConnections: (apiData.data.socials?.length || 0) + (apiData.data.accounts?.length || 0)
                 },
                 
                 projects: {
-                    all: apiData.data.projects,
-                    count: apiData.data.projects?.length || 0
+                    all: apiData.data.projects || [],
+                    count: apiData.data.projects?.length || 0,
+                    recent: (apiData.data.projects || []).slice(0, 5)
+                },
+                
+                scrapedData: {
+                    stats: apiData.data.scrapedStats || {},
+                    activityFeed: apiData.data.activityFeed || [],
+                    skills: apiData.data.skills || [],
+                    achievements: apiData.data.achievements || []
                 },
                 
                 yearInReview: wrappedStats,
                 
                 metadata: {
                     generatedAt: new Date().toISOString(),
-                    dataSource: 'Talent Protocol API',
-                    year: new Date().getFullYear()
+                    dataSource: 'Talent Protocol API + Web Scraping',
+                    year: new Date().getFullYear(),
+                    dataAvailability: {
+                        profile: true,
+                        scores: true,
+                        events: apiData.data.events?.length > 0,
+                        credentials: apiData.data.credentials?.length > 0,
+                        projects: apiData.data.projects?.length > 0,
+                        scraping: apiData.data.scrapingSuccess
+                    }
                 }
             };
+
+            console.log('Wrapped data generated successfully\n');
 
             return res.status(200).json(formatSuccess(wrappedData, 'Wrapped data fetched successfully'));
         
@@ -88,7 +115,6 @@ class WrappedController {
         }
     }
 
-    // Health check endpoint
     async healthCheck(req, res) {
         return res.status(200).json(formatSuccess({ 
             status: 'healthy',
@@ -99,35 +125,25 @@ class WrappedController {
     }
 }
 
-// Calculate year-in-review statistics
 function calculateWrappedStats(data) {
     const currentYear = new Date().getFullYear();
     const yearStart = new Date(`${currentYear}-01-01`);
     
-    const stats = {
+    return {
         year: currentYear,
         builderScoreGrowth: calculateScoreGrowth(data.events),
         topActivities: getTopActivities(data.events),
-        milestones: extractMilestones(data.events, data.dataPoints),
+        milestones: extractMilestones(data.events, data.credentials),
         monthlyActivity: getMonthlyActivityBreakdown(data.events),
-        mostActiveMonth: null,
+        mostActiveMonth: getMostActiveMonth(getMonthlyActivityBreakdown(data.events)),
         credentialsEarned: getCredentialsThisYear(data.credentials, yearStart),
-        projectsLaunched: getProjectsThisYear(data.projects, yearStart),
-        connectionsGrown: calculateConnectionGrowth(data.events)
+        connectionsGrown: calculateConnectionGrowth(data.events),
+        totalActivity: data.events?.length || 0
     };
-
-    // Find most active month
-    if (stats.monthlyActivity) {
-        stats.mostActiveMonth = Object.entries(stats.monthlyActivity)
-            .reduce((max, [month, count]) => count > max.count ? { month, count } : max, { month: null, count: 0 });
-    }
-
-    return stats;
 }
 
-// Helper: Get builder score level
 function getBuilderScoreLevel(points) {
-    if (!points) return null;
+    if (!points) return { level: 1, name: 'Newcomer' };
     if (points >= 500) return { level: 6, name: 'Expert' };
     if (points >= 300) return { level: 5, name: 'Advanced' };
     if (points >= 150) return { level: 4, name: 'Proficient' };
@@ -136,26 +152,29 @@ function getBuilderScoreLevel(points) {
     return { level: 1, name: 'Newcomer' };
 }
 
-// Helper: Calculate score growth
 function calculateScoreGrowth(events) {
-    if (!events || events.length === 0) return { growth: 0, percentage: 0 };
+    if (!events || events.length === 0) {
+        return { growth: 0, percentage: 0, trend: 'stable' };
+    }
 
-    // Filter score-related events
     const scoreEvents = events.filter(e => 
-        e.event_type?.includes('score') || e.event_type?.includes('points')
-    );
+        e.event_type?.toLowerCase().includes('score') || 
+        e.event_type?.toLowerCase().includes('points')
+    ).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     
-    if (scoreEvents.length < 2) return { growth: 0, percentage: 0 };
+    if (scoreEvents.length < 2) {
+        return { growth: 0, percentage: 0, trend: 'new' };
+    }
     
-    const firstScore = scoreEvents[scoreEvents.length - 1]?.new_value || 0;
-    const lastScore = scoreEvents[0]?.new_value || 0;
+    const firstScore = scoreEvents[0]?.new_value || scoreEvents[0]?.value || 0;
+    const lastScore = scoreEvents[scoreEvents.length - 1]?.new_value || scoreEvents[scoreEvents.length - 1]?.value || 0;
     const growth = lastScore - firstScore;
     const percentage = firstScore > 0 ? ((growth / firstScore) * 100).toFixed(1) : 0;
+    const trend = growth > 0 ? 'growing' : growth < 0 ? 'declining' : 'stable';
     
-    return { growth, percentage };
+    return { growth, percentage, trend };
 }
 
-// Helper: Get top activities
 function getTopActivities(events) {
     if (!events || events.length === 0) return [];
     
@@ -171,42 +190,44 @@ function getTopActivities(events) {
         .map(([type, count]) => ({ type, count }));
 }
 
-// Helper: Extract milestones
-function extractMilestones(events, dataPoints) {
+function extractMilestones(events, credentials) {
     const milestones = [];
+    const currentYear = new Date().getFullYear();
     
-    // Check for significant events
     if (events && events.length > 0) {
         events.forEach(event => {
-            if (event.event_type?.includes('first') || 
-                event.event_type?.includes('milestone') ||
-                event.significance === 'high') {
+            const eventDate = new Date(event.created_at);
+            if (eventDate.getFullYear() === currentYear) {
+                if (event.event_type?.toLowerCase().includes('milestone') || event.points_change > 10) {
+                    milestones.push({
+                        type: event.event_type,
+                        date: event.created_at,
+                        description: event.description || event.event_type,
+                        impact: event.points_change || 0
+                    });
+                }
+            }
+        });
+    }
+    
+    if (credentials && credentials.length > 0) {
+        credentials.forEach(cred => {
+            const credDate = new Date(cred.earned_at || cred.last_calculated_at);
+            if (credDate.getFullYear() === currentYear) {
                 milestones.push({
-                    type: event.event_type,
-                    date: event.created_at,
-                    description: event.description
+                    type: 'credential_earned',
+                    date: cred.earned_at || cred.last_calculated_at,
+                    description: `Earned ${cred.name || 'credential'}`
                 });
             }
         });
     }
     
-    // Check data points for milestones
-    if (dataPoints) {
-        if (dataPoints.onchain?.contracts_deployed_mainnet > 0) {
-            milestones.push({
-                type: 'contracts_deployed',
-                count: dataPoints.onchain.contracts_deployed_mainnet,
-                description: 'Deployed smart contracts to mainnet'
-            });
-        }
-    }
-    
-    return milestones.slice(0, 10);
+    return milestones.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
 }
 
-// Helper: Get monthly activity breakdown
 function getMonthlyActivityBreakdown(events) {
-    if (!events || events.length === 0) return null;
+    if (!events || events.length === 0) return {};
     
     const currentYear = new Date().getFullYear();
     const monthlyActivity = {};
@@ -222,70 +243,68 @@ function getMonthlyActivityBreakdown(events) {
     return monthlyActivity;
 }
 
-// Helper: Get credentials earned this year
+function getMostActiveMonth(monthlyActivity) {
+    if (!monthlyActivity || Object.keys(monthlyActivity).length === 0) return null;
+    
+    return Object.entries(monthlyActivity)
+        .reduce((max, [month, count]) => 
+            count > max.count ? { month, count } : max, 
+            { month: null, count: 0 }
+        );
+}
+
 function getCredentialsThisYear(credentials, yearStart) {
-    if (!credentials) return [];
+    if (!credentials || credentials.length === 0) return [];
     
     return credentials.filter(cred => {
-        const earnedDate = new Date(cred.earned_at || cred.created_at);
+        const earnedDate = new Date(cred.earned_at || cred.last_calculated_at);
         return earnedDate >= yearStart;
     });
 }
 
-// Helper: Get projects launched this year
-function getProjectsThisYear(projects, yearStart) {
-    if (!projects) return [];
-    
-    return projects.filter(proj => {
-        const launchDate = new Date(proj.created_at);
-        return launchDate >= yearStart;
-    });
-}
-
-// Helper: Calculate connection growth
 function calculateConnectionGrowth(events) {
-    if (!events) return { newConnections: 0 };
+    if (!events || events.length === 0) {
+        return { newConnections: 0, platforms: [] };
+    }
     
-    const connectionEvents = events.filter(e => 
-        e.event_type?.includes('connection') || 
-        e.event_type?.includes('follow') ||
-        e.event_type?.includes('account_added')
-    );
+    const connectionEvents = events.filter(e => {
+        const type = (e.event_type || '').toLowerCase();
+        return type.includes('connection') || type.includes('follow') || type.includes('account');
+    });
     
     return {
         newConnections: connectionEvents.length,
-        platforms: [...new Set(connectionEvents.map(e => e.platform))].filter(Boolean)
+        platforms: [...new Set(connectionEvents.map(e => e.platform || e.source))].filter(Boolean)
     };
 }
 
-// Helper: Group credentials by category
 function groupCredentialsByCategory(credentials) {
-    if (!credentials) return null;
+    if (!credentials || credentials.length === 0) return {};
     
-    const grouped = {
-        identity: [],
-        activity: [],
-        skills: []
-    };
+    const grouped = {};
     
     credentials.forEach(cred => {
-        const category = cred.category?.toLowerCase() || 'skills';
-        if (grouped[category]) {
-            grouped[category].push(cred);
+        const category = cred.category || 'other';
+        if (!grouped[category]) {
+            grouped[category] = [];
         }
+        grouped[category].push({
+            name: cred.name || cred.slug,
+            slug: cred.slug,
+            earnedAt: cred.earned_at || cred.last_calculated_at
+        });
     });
     
     return grouped;
 }
 
-// Helper: Process events timeline
 function processEventsTimeline(events) {
-    if (!events || events.length === 0) return null;
+    if (!events || events.length === 0) return [];
     
     return events.slice(0, 50).map(event => ({
         type: event.event_type,
         date: event.created_at,
-        description: event.description,
+        description: event.description || event.event_type,
         impact: event.points_change || 0
     }));
 }
