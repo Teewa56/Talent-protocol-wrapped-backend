@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const wrappedController = require('../controllers/wrapped.controller');
-const { apiLimiter, scraperLimiter } = require('../middleware/rateLimit');
+const { apiLimiter, scraperLimiter } = require('../middleware/ratelimiter.middleware');
 
 // Health check route
 router.get('/health', wrappedController.healthCheck);

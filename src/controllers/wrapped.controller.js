@@ -1,5 +1,5 @@
-const talentApiService = require('../services/talentApi.service');
-const scraperService = require('../services/scraper.service');
+const talentApiService = require('../services/talentAPI.service');
+const scraperService = require('../services/webScraper.service');
 const { formatSuccess, formatError } = require('../utils/response.formatter');
 
 class WrappedController {
