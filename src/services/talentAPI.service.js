@@ -31,7 +31,7 @@ class TalentApiService {
                 .join("&");
                 
             const response = await axios.get(`${this.baseURL}/search/advanced/profiles?${queryString}`, {headers: this.headers});
-
+            console.log('profile', response.data)
             if (!response.data.profiles || response.data.profiles.length === 0) {
                 return { success: false, error: 'User not found' };
             }
@@ -56,7 +56,7 @@ class TalentApiService {
                 : `${this.baseURL}/data_points/${identifier}`;
                 
             const response = await axios.get(url, { headers: this.headers });
-
+            console.log('datapoints', response.data)
             // Check if response is HTML (authentication error)
             if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
                 return {
@@ -120,6 +120,8 @@ class TalentApiService {
                 { headers: this.headers }
             );
 
+            console.log('getcredentials', response.data)
+
             if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
                 return { success: false, error: 'Authentication required' };
             }
@@ -149,6 +151,8 @@ class TalentApiService {
                 { headers: this.headers }
             );
 
+            console.log('getevents', response.data)
+
             if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
                 return { success: false, error: 'Authentication required' };
             }
@@ -171,6 +175,8 @@ class TalentApiService {
                 { headers: this.headers }
             );
 
+            console.log('accounts', response.data)
+
             if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
                 return { success: false, error: 'Authentication required' };
             }
@@ -192,6 +198,8 @@ class TalentApiService {
                 { headers: this.headers }
             );
 
+            console.log('socails', response.data)
+
             if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
                 return { success: false, error: 'Authentication required' };
             }
@@ -212,6 +220,8 @@ class TalentApiService {
                 `${this.baseURL}/projects/${identifier}`,
                 { headers: this.headers }
             );
+            
+            console.log('projects', response.data)
 
             if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
                 return { success: false, error: 'Authentication required' };
@@ -233,6 +243,8 @@ class TalentApiService {
                 `${this.baseURL}/scores/${scoreSlug}/${identifier}`,
                 { headers: this.headers }
             );
+            
+            console.log('score', response.data)
 
             if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
                 return { success: false, error: 'Authentication required' };
@@ -275,6 +287,8 @@ class TalentApiService {
                 `${this.baseURL}/human_checkmark/${identifier}`,
                 { headers: this.headers }
             );
+            
+            console.log('checkmark', response.data)
 
             if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
                 return { success: false, error: 'Authentication required' };

@@ -13,14 +13,14 @@ class WrappedController {
 
             // Fetch comprehensive data from API
             const apiData = await talentApiService.getComprehensiveWrappedData(baseName);
-            // console.log("apidata", apiData)
+
             if (!apiData.success) {
                 return res.status(404).json(formatError('User not found', apiData.error));
             }
 
             // Process and calculate wrapped statistics
             const wrappedStats = calculateWrappedStats(apiData.data);
-            console.log(wrappedStats)
+
             // Combine all data into wrapped format
             const wrappedData = {
                 user: {
