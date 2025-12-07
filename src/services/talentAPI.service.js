@@ -11,13 +11,26 @@ class TalentApiService {
         };
     }
 
-    // Fetch user profile by basename
+    // Fetch user profile by basename - THIS IS A POST REQUEST
     async getUserProfile(baseName) {
         try {
-            const response = await axios.get(`${this.baseURL}/search/advanced/profiles`, {
-                params: { name: baseName },
-                headers: this.headers
-            });
+            const data = {
+                "query": {
+                    "identity": `${baseName}`,
+                   "exactMatch": true
+                },
+                "sort": {
+                    "id": { "order": "asc" }
+                },
+                page: 1,
+                per_page: 25
+            }
+
+            const queryString = Object.keys(data)
+                .map(key => `${key}=${encodeURIComponent(JSON.stringify(data[key]))}`)
+                .join("&");
+                
+            const response = await axios.get(`${this.baseURL}/search/advanced/profiles?${queryString}`, {headers: this.headers});
 
             if (!response.data.profiles || response.data.profiles.length === 0) {
                 return { success: false, error: 'User not found' };
@@ -35,7 +48,7 @@ class TalentApiService {
         }
     }
     
-    // Get all data points for a user (comprehensive activity data)
+    // Get all data points for a user
     async getDataPoints(identifier, credentialSlug = null) {
         try {
             const url = credentialSlug 
@@ -43,6 +56,14 @@ class TalentApiService {
                 : `${this.baseURL}/data_points/${identifier}`;
                 
             const response = await axios.get(url, { headers: this.headers });
+
+            // Check if response is HTML (authentication error)
+            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+                return {
+                    success: false,
+                    error: 'Authentication required - endpoint needs valid API key'
+                };
+            }
 
             return {
                 success: true,
@@ -55,12 +76,12 @@ class TalentApiService {
     }
 
     // Get specific activity data points
-    async getActivityDataPoints(baseName) {
+    async getActivityDataPoints(identifier) {
         try {
             // Fetch onchain activity data points
-            const onchainActivity = await this.getDataPoints(baseName, 'onchain_activity');
-            const githubData = await this.getDataPoints(baseName, 'github');
-            const baseData = await this.getDataPoints(baseName, 'base');
+            const onchainActivity = await this.getDataPoints(identifier, 'onchain_activity');
+            const githubData = await this.getDataPoints(identifier, 'github');
+            const baseData = await this.getDataPoints(identifier, 'base');
             
             return {
                 success: true,
@@ -78,10 +99,30 @@ class TalentApiService {
     // Get credentials for a user
     async getCredentials(identifier) {
         try {
+            const data = {
+                "query": {
+                    "id": `${identifier}`,
+                    "exactMatch": true
+                },
+                "sort": {
+                    "id": { "order": "asc" }
+                },
+                page: 1,
+                per_page: 25
+            }
+
+            const queryString = Object.keys(data)
+                .map(key => `${key}=${encodeURIComponent(JSON.stringify(data[key]))}`)
+                .join("&");
+
             const response = await axios.get(
-                `${this.baseURL}/credentials/${identifier}`,
+                `${this.baseURL}/credentials/?identifier=${queryString}`,
                 { headers: this.headers }
             );
+
+            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+                return { success: false, error: 'Authentication required' };
+            }
 
             return {
                 success: true,
@@ -92,7 +133,7 @@ class TalentApiService {
         }
     }
 
-    // Get historical events/activity for a user
+    // Get historical events/activity for a user - POST REQUEST
     async getEvents(identifier, options = {}) {
         try {
             const params = {
@@ -108,9 +149,13 @@ class TalentApiService {
                 { headers: this.headers }
             );
 
+            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+                return { success: false, error: 'Authentication required' };
+            }
+
             return {
                 success: true,
-                data: response.data.events || response.data,
+                data: response.data.events || [],
                 pagination: response.data.pagination || null
             };
         } catch (error) {
@@ -126,9 +171,13 @@ class TalentApiService {
                 { headers: this.headers }
             );
 
+            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+                return { success: false, error: 'Authentication required' };
+            }
+
             return {
                 success: true,
-                data: response.data.accounts || response.data
+                data: response.data.accounts || []
             };
         } catch (error) {
             return this.handleError('getAccounts', error);
@@ -143,9 +192,13 @@ class TalentApiService {
                 { headers: this.headers }
             );
 
+            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+                return { success: false, error: 'Authentication required' };
+            }
+
             return {
                 success: true,
-                data: response.data.socials || response.data
+                data: response.data.socials || []
             };
         } catch (error) {
             return this.handleError('getSocials', error);
@@ -160,9 +213,13 @@ class TalentApiService {
                 { headers: this.headers }
             );
 
+            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+                return { success: false, error: 'Authentication required' };
+            }
+
             return {
                 success: true,
-                data: response.data.projects || response.data
+                data: response.data.projects || []
             };
         } catch (error) {
             return this.handleError('getProjects', error);
@@ -176,6 +233,10 @@ class TalentApiService {
                 `${this.baseURL}/scores/${scoreSlug}/${identifier}`,
                 { headers: this.headers }
             );
+
+            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+                return { success: false, error: 'Authentication required' };
+            }
 
             return {
                 success: true,
@@ -215,6 +276,10 @@ class TalentApiService {
                 { headers: this.headers }
             );
 
+            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+                return { success: false, error: 'Authentication required' };
+            }
+
             return {
                 success: true,
                 data: response.data
@@ -227,9 +292,17 @@ class TalentApiService {
     // Get all wrapped-relevant data in one method
     async getComprehensiveWrappedData(baseName) {
         try {
-            // Fetch all data in parallel
+            // First, get the profile
+            const profile = await this.getUserProfile(baseName);
+            
+            if (!profile.success) {
+                return profile; // Return the error
+            }
+
+            const userId = profile.data.id || baseName;
+
+            // Fetch all data in parallel using the user ID
             const [
-                profile,
                 dataPoints,
                 credentials,
                 events,
@@ -238,20 +311,19 @@ class TalentApiService {
                 projects,
                 humanCheckmark
             ] = await Promise.all([
-                this.getUserProfile(baseName),
-                this.getActivityDataPoints(baseName),
-                this.getCredentials(baseName),
-                this.getEvents(baseName, { per_page: 100 }),
-                this.getAccounts(baseName),
-                this.getSocials(baseName),
-                this.getProjects(baseName),
-                this.getHumanCheckmark(baseName)
+                this.getActivityDataPoints(userId),
+                this.getCredentials(userId),
+                this.getEvents(userId, { per_page: 100 }),
+                this.getAccounts(userId),
+                this.getSocials(userId),
+                this.getProjects(userId),
+                this.getHumanCheckmark(userId)
             ]);
 
             return {
                 success: true,
                 data: {
-                    profile: profile.success ? profile.data : null,
+                    profile: profile.data,
                     dataPoints: dataPoints.success ? dataPoints.data : null,
                     credentials: credentials.success ? credentials.data : null,
                     events: events.success ? events.data : null,
@@ -260,7 +332,7 @@ class TalentApiService {
                     projects: projects.success ? projects.data : null,
                     humanCheckmark: humanCheckmark.success ? humanCheckmark.data : null
                 },
-                relativePath: profile.success ? profile.relativePath : null
+                relativePath: profile.relativePath
             };
         } catch (error) {
             return this.handleError('getComprehensiveWrappedData', error);
@@ -288,6 +360,12 @@ class TalentApiService {
 
     handleError(methodName, error) {
         console.error(`Error in ${methodName}:`, error.message);
+        if (error.response?.data) {
+            const dataPreview = typeof error.response.data === 'string' 
+                ? error.response.data.substring(0, 200) 
+                : JSON.stringify(error.response.data).substring(0, 200);
+            console.error('Response data preview:', dataPreview);
+        }
         return {
             success: false,
             error: error.response?.data?.message || error.message,

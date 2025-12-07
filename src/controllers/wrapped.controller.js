@@ -1,5 +1,4 @@
 const talentApiService = require('../services/talentAPI.service');
-const scraperService = require('../services/webScraper.service');
 const { formatSuccess, formatError } = require('../utils/response.formatter');
 
 class WrappedController {
@@ -12,17 +11,17 @@ class WrappedController {
                 return res.status(400).json(formatError('Base name is required'));
             }
 
-            // Step 1: Fetch comprehensive data from API
+            // Fetch comprehensive data from API
             const apiData = await talentApiService.getComprehensiveWrappedData(baseName);
-            console.log(apiData)
+            // console.log("apidata", apiData)
             if (!apiData.success) {
                 return res.status(404).json(formatError('User not found', apiData.error));
             }
 
-            // Step 3: Process and calculate wrapped statistics
+            // Process and calculate wrapped statistics
             const wrappedStats = calculateWrappedStats(apiData.data);
-
-            // Step 4: Combine all data into wrapped format
+            console.log(wrappedStats)
+            // Combine all data into wrapped format
             const wrappedData = {
                 user: {
                     id: apiData.data.profile?.id,
@@ -52,7 +51,7 @@ class WrappedController {
                         total: apiData.data.events?.length || 0,
                         recent: apiData.data.events?.slice(0, 10) || [],
                         timeline: processEventsTimeline(apiData.data.events)
-                    },
+                    }
                 },
                 
                 credentials: {
@@ -76,11 +75,7 @@ class WrappedController {
                 
                 metadata: {
                     generatedAt: new Date().toISOString(),
-                    dataSources: {
-                        api: true,
-                        profileScraping: scrapedProfile.success,
-                        scoresScraping: scrapedScores.success
-                    },
+                    dataSource: 'Talent Protocol API',
                     year: new Date().getFullYear()
                 }
             };
@@ -294,6 +289,5 @@ function processEventsTimeline(events) {
         impact: event.points_change || 0
     }));
 }
-
 
 module.exports = new WrappedController();
